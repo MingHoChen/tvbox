@@ -2,40 +2,25 @@ name: Sync Fork from Upstream
 
 # 這定義了工作流程何時會被觸發
 on:
-  # 允許手動觸發此工作流程 (在 GitHub Actions 頁面點擊 "Run workflow")
   workflow_dispatch:
-
-  # 定時觸發此工作流程
-  # 以下 cron 表達式設定為每天 UTC 時間凌晨 3 點運行。
-  # 你可以根據需要調整時間和頻率。
-  # cron 語法參考：
-  # 分 時 日 月 週
-  # 0  3  * * * (每天凌晨 3 點)
-  # 0  0  * * 0  (每週日午夜)
-  # 更多 cron 語法請參考：https://crontab.guru/
   schedule:
     - cron: '0 3 * * *'
 
 # 工作流程包含的任務 (jobs)
 jobs:
   sync_with_upstream:
-    # 指定運行這個任務的執行環境
     runs-on: ubuntu-latest
 
     # 步驟列表
     steps:
       # 步驟 1: 檢查你的目標倉庫 (即你的 Fork 倉庫)
       - name: Checkout target repository
-        uses: actions/checkout@v4 # 使用 actions/checkout@v4 來檢查代碼
+        uses: actions/checkout@v4
         with:
-          # 必須使用 Personal Access Token (PAT) 來擁有推送到你的 Fork 的權限
-          # GITHUB_TOKEN 在 Fork 倉庫中預設沒有足夠權限推送到 Fork 本身。
-          # 請確保你已經在倉庫的 Secrets 中添加了名為 PAT_TOKEN 的密鑰。
-          token: ${{ secrets.MH}}
-          # 預設會檢查當前分支，這裡我們不強制指定，讓 git checkout 處理
+          # 這裡將引用更改為你實際設定的 Secret 名稱：MH
+          token: ${{ secrets.MH }} # <--- 修改這一行，將 PAT_TOKEN 改為 MH
 
       # 步驟 2: 配置 Git 使用者資訊
-      # 這是為了讓 Git 提交時有正確的作者資訊，即使沒有實際的提交發生
       - name: Configure Git user
         run: |
           git config user.name "github-actions[bot]"
@@ -43,11 +28,8 @@ jobs:
           echo "Git user configured."
 
       # 步驟 3: 添加上游遠端倉庫
-      # 如果已經存在 'upstream' 遠端，這個命令會失敗，但 '|| true' 會讓腳本繼續執行。
-      # 或者使用 '|| echo "..."' 來印出訊息但不報錯，確保腳本不會因為遠端已存在而中斷。
       - name: Add upstream remote if not exists
         run: |
-          # 檢查 'upstream' 遠端是否已存在
           if ! git remote -v | grep -q 'upstream'; then
             git remote add upstream https://github.com/qist/tvbox.git
             echo "Upstream remote added."
@@ -65,31 +47,23 @@ jobs:
       # 步驟 5: 將上游更改合併到你的本地主分支
       - name: Merge upstream into main branch
         run: |
-          # 確保切換到正確的本地分支 (例如 master 或 main)
-          # 請根據你的倉庫實際主分支名稱修改 'master'
-          MAIN_BRANCH="master" # <-- 在這裡設定你的主分支名稱 (master 或 main)
+          MAIN_BRANCH="master" # <-- 請在這裡設定你的主分支名稱 (master 或 main)
           echo "Checking out branch: ${MAIN_BRANCH}..."
           git checkout "${MAIN_BRANCH}"
           
           echo "Merging upstream/${MAIN_BRANCH} into ${MAIN_BRANCH}..."
-          # 執行合併操作
-          # 警告: 如果發生合併衝突，此工作流程將會失敗。
-          # 你需要手動解決衝突，然後重新觸發工作流程。
-          # 如果你的 Fork 沒有獨特更改且你希望在衝突時自動選擇上游，
-          # 可以將下一行替換為：git merge -Xtheirs upstream/"${MAIN_BRANCH}"
           git merge upstream/"${MAIN_BRANCH}"
           
-          if [ $? -ne 0 ]; then # 檢查上一個命令的退出碼
+          if [ $? -ne 0 ]; then
             echo "::error::Merge conflict detected. Please resolve manually."
-            exit 1 # 如果有衝突，則使工作流程失敗
+            exit 1
           fi
           echo "Merge complete."
 
       # 步驟 6: 將更新推送到你的 GitHub Fork (origin)
       - name: Push changes to origin
         run: |
-          # 請根據你的倉庫實際主分支名稱修改 'master'
-          MAIN_BRANCH="master" # <-- 在這裡設定你的主分支名稱 (master 或 main)
+          MAIN_BRANCH="master" # <-- 請在這裡設定你的主分支名稱 (master 或 main)
           echo "Pushing changes to origin/${MAIN_BRANCH}..."
           git push origin "${MAIN_BRANCH}"
           echo "Push complete. Your fork is now synchronized!"
