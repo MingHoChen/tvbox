@@ -28,7 +28,7 @@ jobs:
           # 請確保你已經在倉庫的 Secrets 中添加了名為 MH 的密鑰。
           token: ${{ secrets.MH }} # <-- 根據你設定的 Secret 名稱修改這裡
 
-      # 步驟 2: 配置 Git 使用者資訊 (雖然會被重置覆蓋，但良好習慣保留)
+      # 步驟 2: 配置 Git 使用者資訊
       - name: Configure Git user
         run: |
           git config user.name "github-actions[bot]"
@@ -52,32 +52,34 @@ jobs:
           git fetch upstream
           echo "Fetch complete."
 
-      # 步驟 5: 將你的本地主分支強制重置到上游分支的狀態，並強制推送到你的 Fork
-      # 警告：此操作會丟棄你的 Fork 上所有獨特的提交和歷史記錄，使其成為上游倉庫的精確副本。
-      # 請確保你了解其影響。
-      - name: Reset local branch and force push to origin
+      # 步驟 5: 將上游更改合併到你的本地主分支
+      - name: Merge upstream into main branch (auto-resolve with upstream's version)
         run: |
+          # 確保切換到正確的本地分支 (例如 master 或 main)
+          # 請根據你的倉庫實際主分支名稱修改 'master'
           MAIN_BRANCH="master" # <-- 在這裡設定你的主分支名稱 (master 或 main)
           echo "Checking out branch: ${MAIN_BRANCH}..."
           git checkout "${MAIN_BRANCH}"
           
-          echo "WARNING: Resetting local branch '${MAIN_BRANCH}' to 'upstream/${MAIN_BRANCH}'."
-          echo "         This will discard ALL unique commits on your fork's ${MAIN_BRANCH} branch."
-          echo "         Your fork will become an EXACT copy of the upstream's ${MAIN_BRANCH}."
+          echo "Merging upstream/${MAIN_BRANCH} into ${MAIN_BRANCH} (allowing unrelated histories and preferring upstream's version in conflicts)..."
+          # 核心修改在這裡：
+          # --allow-unrelated-histories: 解決首次合併時歷史不相關的問題。
+          # -Xtheirs: 當發生衝突時，自動選擇來自 'upstream' 的版本。
+          #           這會覆蓋你的 Fork 在衝突點上的任何本地修改。
+          git merge --allow-unrelated-histories -Xtheirs upstream/"${MAIN_BRANCH}"
           
-          # 將本地分支強制重置到上游的狀態
-          git reset --hard upstream/"${MAIN_BRANCH}"
-          echo "Local branch reset complete."
-          
-          echo "Force pushing changes to origin/${MAIN_BRANCH}..."
-          # 強制推送到你的 GitHub Fork，覆蓋原有的歷史
-          # --force-with-lease 是一個更安全的強制推送，可以防止覆蓋他人新的提交
-          # 但在自動化且你確定沒有其他人在該分支上工作時，單純的 --force 也常被使用。
-          git push --force origin "${MAIN_BRANCH}"
-          echo "Force push complete. Your fork is now an exact copy of upstream!"
+          if [ $? -ne 0 ]; then # 檢查上一個命令的退出碼
+            echo "::error::Merge failed despite -Xtheirs. This might indicate a serious issue."
+            exit 1 # 如果仍然失敗，表示有更深層的問題，需要手動檢查
+          fi
+          echo "Merge complete."
 
-      # 步驟 6: (可選) 清理 Git 垃圾，這有助於保持倉庫整潔
-      - name: Clean up Git objects
-        run: git gc --prune=now
-        
-      echo "All operations completed."
+      # 步驟 6: 將更新推送到你的 GitHub Fork (origin)
+      - name: Push changes to origin
+        run: |
+          # 請根據你的倉庫實際主分支名稱修改 'master'
+          MAIN_BRANCH="master" # <-- 在這裡設定你的主分支名稱 (master 或 main)
+          echo "Pushing changes to origin/${MAIN_BRANCH}..."
+          git push origin "${MAIN_BRANCH}"
+          echo "Push complete. Your fork is now synchronized!"
+
