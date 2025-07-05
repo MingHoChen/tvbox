@@ -31,7 +31,7 @@ jobs:
           # 必須使用 Personal Access Token (PAT) 來擁有推送到你的 Fork 的權限
           # GITHUB_TOKEN 在 Fork 倉庫中預設沒有足夠權限推送到 Fork 本身。
           # 請確保你已經在倉庫的 Secrets 中添加了名為 PAT_TOKEN 的密鑰。
-          token: ${{ secrets.PAT_TOKEN }}
+          token: ${{ secrets.MH}}
           # 預設會檢查當前分支，這裡我們不強制指定，讓 git checkout 處理
 
       # 步驟 2: 配置 Git 使用者資訊
