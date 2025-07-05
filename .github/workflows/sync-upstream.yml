@@ -8,11 +8,7 @@ on:
   # 定時觸發此工作流程
   # 以下 cron 表達式設定為每天 UTC 時間凌晨 3 點運行。
   # 你可以根據需要調整時間和頻率。
-  # cron 語法參考：
-  # 分 時 日 月 週
-  # 0  3  * * * (每天凌晨 3 點)
-  # 0  0  * * 0  (每週日午夜)
-  # 更多 cron 語法請參考：https://crontab.guru/
+  # cron 語法參考：https://crontab.guru/
   schedule:
     - cron: '0 3 * * *'
 
@@ -29,12 +25,10 @@ jobs:
         uses: actions/checkout@v4 # 使用 actions/checkout@v4 來檢查代碼
         with:
           # 必須使用 Personal Access Token (PAT) 來擁有推送到你的 Fork 的權限
-          # GITHUB_TOKEN 在 Fork 倉庫中預設沒有足夠權限推送到 Fork 本身。
           # 請確保你已經在倉庫的 Secrets 中添加了名為 MH 的密鑰。
           token: ${{ secrets.MH }} # <-- 根據你設定的 Secret 名稱修改這裡
 
-      # 步驟 2: 配置 Git 使用者資訊
-      # 這是為了讓 Git 提交時有正確的作者資訊，即使沒有實際的提交發生
+      # 步驟 2: 配置 Git 使用者資訊 (雖然會被重置覆蓋，但良好習慣保留)
       - name: Configure Git user
         run: |
           git config user.name "github-actions[bot]"
@@ -42,11 +36,8 @@ jobs:
           echo "Git user configured."
 
       # 步驟 3: 添加上游遠端倉庫
-      # 如果已經存在 'upstream' 遠端，這個命令會失敗，但 '|| true' 會讓腳本繼續執行。
-      # 或者使用 '|| echo "..."' 來印出訊息但不報錯，確保腳本不會因為遠端已存在而中斷。
       - name: Add upstream remote if not exists
         run: |
-          # 檢查 'upstream' 遠端是否已存在
           if ! git remote -v | grep -q 'upstream'; then
             git remote add upstream https://github.com/qist/tvbox.git
             echo "Upstream remote added."
@@ -54,39 +45,39 @@ jobs:
             echo "Upstream remote already exists."
           fi
 
-      # 4. 從上游倉庫獲取所有分支和歷史
+      # 步驟 4: 從上游倉庫獲取所有分支和歷史
       - name: Fetch from upstream
         run: |
           echo "Fetching latest changes from upstream..."
           git fetch upstream
           echo "Fetch complete."
 
-      # 5. 將上游更改合併到你的本地主分支
-      - name: Merge upstream into main branch
+      # 步驟 5: 將你的本地主分支強制重置到上游分支的狀態，並強制推送到你的 Fork
+      # 警告：此操作會丟棄你的 Fork 上所有獨特的提交和歷史記錄，使其成為上游倉庫的精確副本。
+      # 請確保你了解其影響。
+      - name: Reset local branch and force push to origin
         run: |
-          # 確保切換到正確的本地分支 (例如 master 或 main)
-          # 請根據你的倉庫實際主分支名稱修改 'master'
           MAIN_BRANCH="master" # <-- 在這裡設定你的主分支名稱 (master 或 main)
           echo "Checking out branch: ${MAIN_BRANCH}..."
           git checkout "${MAIN_BRANCH}"
           
-          echo "Merging upstream/${MAIN_BRANCH} into ${MAIN_BRANCH} (allowing unrelated histories)..."
-          # 核心修改在這裡：添加 --allow-unrelated-histories
-          # 警告: 首次合併時可能會有大量衝突。如果你的 Fork 有獨特更改，請小心。
-          git merge --allow-unrelated-histories upstream/"${MAIN_BRANCH}"
+          echo "WARNING: Resetting local branch '${MAIN_BRANCH}' to 'upstream/${MAIN_BRANCH}'."
+          echo "         This will discard ALL unique commits on your fork's ${MAIN_BRANCH} branch."
+          echo "         Your fork will become an EXACT copy of the upstream's ${MAIN_BRANCH}."
           
-          if [ $? -ne 0 ]; then # 檢查上一個命令的退出碼
-            echo "::error::Merge conflict detected or other merge issue. Please resolve manually."
-            # 如果有衝突，則使工作流程失敗，需要手動介入
-            exit 1 
-          fi
-          echo "Merge complete."
+          # 將本地分支強制重置到上游的狀態
+          git reset --hard upstream/"${MAIN_BRANCH}"
+          echo "Local branch reset complete."
+          
+          echo "Force pushing changes to origin/${MAIN_BRANCH}..."
+          # 強制推送到你的 GitHub Fork，覆蓋原有的歷史
+          # --force-with-lease 是一個更安全的強制推送，可以防止覆蓋他人新的提交
+          # 但在自動化且你確定沒有其他人在該分支上工作時，單純的 --force 也常被使用。
+          git push --force origin "${MAIN_BRANCH}"
+          echo "Force push complete. Your fork is now an exact copy of upstream!"
 
-      # 6. 將更新推送到你的 GitHub Fork (origin)
-      - name: Push changes to origin
-        run: |
-          # 請根據你的倉庫實際主分支名稱修改 'master'
-          MAIN_BRANCH="master" # <-- 在這裡設定你的主分支名稱 (master 或 main)
-          echo "Pushing changes to origin/${MAIN_BRANCH}..."
-          git push origin "${MAIN_BRANCH}"
-          echo "Push complete. Your fork is now synchronized!"
+      # 步驟 6: (可選) 清理 Git 垃圾，這有助於保持倉庫整潔
+      - name: Clean up Git objects
+        run: git gc --prune=now
+        
+      echo "All operations completed."
